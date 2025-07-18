@@ -10,7 +10,7 @@ BOM
 
  H Bridge
 
- ![H Brige schema] (img/L298N.wepb)
- 
- <img src="./img/L298N.wepb">
+ ![H Brige schema] (img/L298N.png)
+
+ <img src="./img/L298N.png">
  
