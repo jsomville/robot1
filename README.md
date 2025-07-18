@@ -8,5 +8,6 @@ BOM
  1 x RPI
 
 
- H Bridge 
+ H Bridge
+ ![H Brige schema] (img/L298.jpg)
  
