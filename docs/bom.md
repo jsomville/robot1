@@ -14,12 +14,12 @@
 
 <img src="img/RPI4-GPIO.png">
 
-Motor A Enable/PWM pin : 13
-Motor A A-pin : 6
-Motor A A-pin : 5
+ - Motor A Enable/PWM pin : 13
+ - Motor A A-pin : 6
+ - Motor A A-pin : 5
 
-Motor B Enable/PWM pin : 13
-Motor B A-pin : 6
-Motor B A-pin : 5
+ - Motor B Enable/PWM pin : 13
+ - Motor B A-pin : 6
+ - Motor B A-pin : 5
 
 Note : On a RPI, the PWM command can be disabled at the OS level because of audio.
