@@ -8,11 +8,11 @@
 
 ### H Bridge detail
 
- <img src="./doc/img/L298N.png">
+ <img src="img/L298N.png">
  
 ### RPI Pinout
 
-<img src="./doc/img/RPI4-GPIO.png">
+<img src="img/RPI4-GPIO.png">
 
 Motor A Enable/PWM pin : 13
 Motor A A-pin : 6
