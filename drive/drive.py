@@ -3,6 +3,9 @@ from datetime import datetime
 import time
 import json
 
+from node import Node
+
+from motor import Motor
 
 #Broker Connexions
 broker = "localhost"  # or IP address of your broker
@@ -10,95 +13,107 @@ port = 1883
 keep_alive = 60
 
 #Node info
-robot_name = "myRobot"
-node_name = "drive"
-version = "0.1"
+ROBOT_NAME = "myRobot"
+NODE_NAME = "drive"
+NODE_VERSION = "0.1"
 
-#Topic info
-main_topic = f"{robot_name}/node/{node_name}"
-node_status_topic = f"{main_topic}/status"
-move_service_topic = f"{robot_name}/service/move"
-move_status_topic = f"{robot_name}/service/move/status"
+CMD_TIMEOUT = 1 #in second
 
-#Move service Status
-STOPPED = "stopped"
-MOVING = "moving"
-status = STOPPED
-last_cmd_time = time.time()
-CMD_TIMEOUT = 2 #in second
-
-def publish_node_info():
-    now = datetime.now()
-    client.publish(main_topic, now.isoformat())
+class drive(Node):
+    STOPPED = "stopped"
+    MOVING = "moving"
     
-    topic = f"{main_topic}/version"
-    client.publish(topic, version)
-    
-    client.publish(node_status_topic, "Connected")
-    
-    topic = f"{main_topic}/services"
-    client.publish(node_status_topic, "move")
-    
-    #Subscription
-    client.subscribe(move_service_topic)
-
-
-def on_connect(client, userdata, flags, rc):
-    print(f"Node {node_name} connected")
-    
-    publish_node_info()
-    
-
-def on_message(client, userdata, msg):
-    global last_cmd_time
-    
-    topic_parts = msg.topic.split("/")
-    payload = msg.payload.decode()
-     
-    print(f"Node {node_name} recieved {msg.topic}: {payload}")
-    
-    #Move command
-    if (msg.topic == move_service_topic):
-        print(f"Drive - Moving ")
+    def __init__(self):
+        print("drive init")
         
-        move_cmd = json.loads(payload)
+        self.last_cmd_time = time.time()
+        self.status = drive.STOPPED
+        
+        super().__init__(ROBOT_NAME, NODE_NAME, NODE_VERSION)
+        
+        self.services = "None"
+        self.move_service_topic = f"{ROBOT_NAME}/service/move"
+        self.move_status_topic = f"{ROBOT_NAME}/service/move/status"
+        
+        #Create Motor
+        self.motor_left = Motor("left", 13, 6, 5)
+        self.motor_right = Motor("right", 12, 25, 26)
+        self.set_speed(60)
+        
+        #MQTT connect
+        self.client.on_connect = self._on_connect
+        self.client.on_message = self._on_message
+    
+        self.connect(broker, port, keep_alive)
+    
+    
+    def _on_connect(self, client, userdata, flags, rc):
+        print(f"{NODE_NAME} on connect")
+        
+        self.publish_node_info()
+        
+        #Subscribe
+        client.subscribe(self.move_service_topic)
+        
+    
+    def _on_message(self, client, userdata, msg):
+        
+        topic_parts = msg.topic.split("/")
+        payload = msg.payload.decode()
+        
+        print(f"Node {NODE_NAME} recieved {msg.topic}: {payload}")
+        
+        #Move command
+        if (msg.topic == self.move_service_topic):
+            print(f"Drive - Moving ")
+            
+            move_cmd = json.loads(payload)
+            self.move(move_cmd)
+            
+
+    def move(self, move_cmd):
         linear = move_cmd.get("linear", 0)
         angular = move_cmd.get("angular", 0)
+            
+        #Set Motor
+        if linear > 0:
+            self.motor_left.forward()
+            self.motor_right.forward()
+        elif linear < 0:
+            self.motor_left.reverse()
+            self.motor_right.reverse()
+            
+        self.last_cmd_time = time.time()
+        self.publish_status(drive.MOVING)
+    
+    def publish_status(self, new_status):
+    
+        self.status = new_status
+        self.publish(self.move_status_topic, self.status)
+    
+    def stop(self):
+        print(f"Drive - Stopped ")
         
-        last_cmd_time = time.time()
-        publish_status(MOVING)
-
-
-def stop():
-    print(f"Drive - Stopped ")
-    publish_status(STOPPED)
-
-def publish_status(new_status):
-    global status
+        self.motor_left.stop()
+        self.motor_right.stop()
+        
+        self.publish_status(drive.STOPPED)
     
-    status = new_status
-    client.publish(move_status_topic, status)
-           
-
-def check_timeout():
-    global status
+    def set_speed(self, speed):
+        self.motor_left.set_speed(speed)
+        self.motor_right.set_speed(speed)
     
-    if (status == MOVING):
-        if (time.time() - last_cmd_time) > CMD_TIMEOUT:
-            stop()
-    
-    
-#Connect to Broker
-client = mqtt.Client()
-client.on_connect = on_connect
-client.on_message = on_message
-client.will_set(node_status_topic, payload="Disconnected", qos=1, retain=True)
-client.connect(broker, port, keep_alive)
-client.loop_start()
+    def node_run(self):
+        #Check Command timeout
+        if (self.status == drive.MOVING):
+            if (time.time() - self.last_cmd_time) > CMD_TIMEOUT:
+                self.stop()
 
 try:
+    myDrive = drive()
+    
     while True:
-        check_timeout()
+        myDrive.node_run()
         
         time.sleep(0.01)
         

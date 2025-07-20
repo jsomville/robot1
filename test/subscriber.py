@@ -1,15 +1,12 @@
 import paho.mqtt.client as mqtt
+from datetime import datetime
 
 #Broker Connexions
 broker = "localhost"  # or IP address of your broker
 port = 1883
 keep_alive = 60
 
-
 #Topic
-robot_name = "myRobot"
-example_topic = "say"
-topic = f"{robot_name}/{example_topic}"
 topic = "#"
 
 def on_connect(client, userdata, flags, rc):
@@ -22,13 +19,28 @@ def on_message(client, userdata, msg):
     topic_parts = msg.topic.split("/")
     payload = msg.payload.decode()
      
-    print(f"Received on topic {msg.topic}: {payload}")
+    now = datetime.now()
+    now.isoformat()
+     
+    print(f"{now.isoformat()} {msg.topic} : {payload}")
 
+try:
 
+    client = mqtt.Client()
+    client.on_connect = on_connect
+    client.on_message = on_message
 
-client = mqtt.Client()
-client.on_connect = on_connect
-client.on_message = on_message
+    print(f"Subscriber started")
 
-client.connect(broker, port, keep_alive)
-client.loop_forever()
+    client.connect(broker, port, keep_alive)
+    
+    client.loop_forever()
+    
+except KeyboardInterrupt:
+    print("Subscriber interrupted by user, exiting gracefully.")
+    
+except Exception as e:
+    print(f"Subscriber - An error occurred: {e}")
+        
+finally:
+    print('Subscriber - Finally')

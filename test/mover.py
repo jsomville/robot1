@@ -20,8 +20,8 @@ topic = f"{robot_name}/service/move"
 # Publish a move command
 
 move_cmd = {
-    "linear": 0.3,
-    "angular": 0.1
+    "linear": 1.0,
+    "angular": 0
 }
 
 client.publish(topic, json.dumps(move_cmd))
