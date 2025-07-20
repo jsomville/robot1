@@ -1,10 +1,21 @@
-import paho.mqtt.client as mqtt
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+#import paho.mqtt.client as mqtt
 from datetime import datetime
 import time
 import json
 
-from node import Node
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+logger = logging.getLogger(__name__)
 
+
+from framework.node import Node
 from motor import Motor
 
 #Broker Connexions
@@ -15,7 +26,7 @@ keep_alive = 60
 #Node info
 ROBOT_NAME = "myRobot"
 NODE_NAME = "drive"
-NODE_VERSION = "0.1"
+NODE_VERSION = "0.2"
 
 CMD_TIMEOUT = 1 #in second
 
@@ -24,7 +35,7 @@ class drive(Node):
     MOVING = "moving"
     
     def __init__(self):
-        print("drive init")
+        logger.info(f"{NODE_NAME} init start")
         
         self.last_cmd_time = time.time()
         self.status = drive.STOPPED
@@ -45,10 +56,12 @@ class drive(Node):
         self.client.on_message = self._on_message
     
         self.connect(broker, port, keep_alive)
+        
+        logger.info(f"{NODE_NAME} inited")
     
     
     def _on_connect(self, client, userdata, flags, rc):
-        print(f"{NODE_NAME} on connect")
+        logger.info(f"{NODE_NAME} on connect")
         
         self.publish_node_info()
         
@@ -61,27 +74,35 @@ class drive(Node):
         topic_parts = msg.topic.split("/")
         payload = msg.payload.decode()
         
-        print(f"Node {NODE_NAME} recieved {msg.topic}: {payload}")
+        logger.info(f"{NODE_NAME} message {msg.topic}: {payload}")
         
         #Move command
         if (msg.topic == self.move_service_topic):
-            print(f"Drive - Moving ")
-            
             move_cmd = json.loads(payload)
             self.move(move_cmd)
             
 
     def move(self, move_cmd):
+        logger.info(f"{NODE_NAME} message move")
+        
         linear = move_cmd.get("linear", 0)
         angular = move_cmd.get("angular", 0)
             
         #Set Motor
-        if linear > 0:
+        if (linear > 0 and angular == 0):
             self.motor_left.forward()
             self.motor_right.forward()
-        elif linear < 0:
+        elif (linear < 0 and angular == 0):
             self.motor_left.reverse()
             self.motor_right.reverse()
+        elif (linear == 0 and angular > 0):
+            print("positive angular")
+            self.motor_left.forward()
+            self.motor_right.reverse()
+        elif (linear == 0 and angular < 0):
+            print("negative angular")
+            self.motor_left.reverse()
+            self.motor_right.forward()
             
         self.last_cmd_time = time.time()
         self.publish_status(drive.MOVING)
@@ -92,7 +113,7 @@ class drive(Node):
         self.publish(self.move_status_topic, self.status)
     
     def stop(self):
-        print(f"Drive - Stopped ")
+        logger.info(f"{NODE_NAME} stop")
         
         self.motor_left.stop()
         self.motor_right.stop()
@@ -104,24 +125,27 @@ class drive(Node):
         self.motor_right.set_speed(speed)
     
     def node_run(self):
-        #Check Command timeout
-        if (self.status == drive.MOVING):
-            if (time.time() - self.last_cmd_time) > CMD_TIMEOUT:
-                self.stop()
+        
+        while True:
+            #Check Command timeout
+            if (self.status == drive.MOVING):
+                if (time.time() - self.last_cmd_time) > CMD_TIMEOUT:
+                    self.stop()
+            
+            time.sleep(0.01)
 
-try:
-    myDrive = drive()
-    
-    while True:
+#Main entry point
+if __name__ == "__main__":
+    try:
+        myDrive = drive()
+        
         myDrive.node_run()
+            
+    except KeyboardInterrupt:
+        logger.error(f"{NODE_NAME} Interrupted by user, exiting gracefully.")
         
-        time.sleep(0.01)
-        
-except KeyboardInterrupt:
-    print("Interrupted by user, exiting gracefully.")
-    
-except Exception as e:
-    print(f"An error occurred: {e}")
-        
-finally:
-    print('Finally')
+    except Exception as e:
+        logger.error(f"{NODE_NAME} An error occurred: {e}")
+            
+    finally:
+        logger.error(f"{NODE_NAME} Finally")
