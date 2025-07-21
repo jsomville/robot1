@@ -28,7 +28,11 @@ ROBOT_NAME = "myRobot"
 NODE_NAME = "drive"
 NODE_VERSION = "0.2"
 
+#This default parameters
+MIN_SPEED = 50
+MAX_SPEED = 100
 CMD_TIMEOUT = 1 #in second
+CYCLE = 60 #in HZ
 
 class drive(Node):
     STOPPED = "stopped"
@@ -46,10 +50,14 @@ class drive(Node):
         self.move_service_topic = f"{ROBOT_NAME}/service/move"
         self.move_status_topic = f"{ROBOT_NAME}/service/move/status"
         
+        #Parameters
+        self.init_parameters()
+        
         #Create Motor
         self.motor_left = Motor("left", 13, 6, 5)
         self.motor_right = Motor("right", 12, 25, 26)
-        self.set_speed(60)
+        min_speed = self.parameters.get("min_speed", MIN_SPEED)
+        self.set_speed(min_speed)
         
         #MQTT connect
         self.client.on_connect = self._on_connect
@@ -59,6 +67,17 @@ class drive(Node):
         
         logger.info(f"{NODE_NAME} inited")
     
+    def init_parameters(self):
+        
+        parameters = {
+            "min_speed": MIN_SPEED,
+            "max_speed": MAX_SPEED,
+            "cmd_timeout" : CMD_TIMEOUT,
+            "cycle" : CYCLE
+        }
+        
+        self.cycle_time = 1 / CYCLE
+        self.parameters = parameters
     
     def _on_connect(self, client, userdata, flags, rc):
         logger.info(f"{NODE_NAME} on connect")
@@ -67,6 +86,7 @@ class drive(Node):
         
         #Subscribe
         client.subscribe(self.move_service_topic)
+        client.subscribe(self.parameters_topic)
         
     
     def _on_message(self, client, userdata, msg):
@@ -76,10 +96,35 @@ class drive(Node):
         
         logger.info(f"{NODE_NAME} message {msg.topic}: {payload}")
         
-        #Move command
-        if (msg.topic == self.move_service_topic):
-            move_cmd = json.loads(payload)
-            self.move(move_cmd)
+        match msg.topic :
+            case self.move_service_topic:
+                move_cmd = json.loads(payload)
+                self.move(move_cmd)
+            case self.parameters_topic:
+                parameters = json.loads(payload)
+                self.parse_parameters(parameters)
+                    
+                    
+    def parse_parameters(self, parameters):
+        logger.info(f"{NODE_NAME} parse new parameters {parameters}")
+        self.parameters_updated = True
+    
+        try:
+            val = parameters.get("min_speed", MIN_SPEED)
+            if self.parameters["min_speed"] != val :
+                self.parameters["min_speed"] = val
+            val = parameters.get("max_speed", MAX_SPEED)   
+            if self.parameters["max_speed"] != val :
+                self.parameters["max_speed"] = val
+            val = parameters.get("cmd_timeout", CMD_TIMEOUT)
+            if self.parameters["cmd_timeout"]!= val :
+                self.parameters["cmd_timeout"] = val
+            val = parameters.get("cycle", CYCLE)
+            if self.parameters["cycle"]!= val :
+                self.parameters["cycle"] = val
+                self.cycle_time = 1 / val
+        except Exception as e:
+            logger.error(f"{NODE_NAME} update parameters : {e}")
             
 
     def move(self, move_cmd):
@@ -87,25 +132,37 @@ class drive(Node):
         
         linear = move_cmd.get("linear", 0)
         angular = move_cmd.get("angular", 0)
-            
+        
+        #check if was previously moving and adjust speed
+        if (self.status == drive.STOPPED):
+            min_speed = self.parameters.get("min_speed", MIN_SPEED)
+            self.set_speed(min_speed)
+        else:
+            max_speed = self.parameters.get("max_speed", MAX_SPEED)
+            self.set_speed(max_speed)
+        
         #Set Motor
         if (linear > 0 and angular == 0):
             self.motor_left.forward()
             self.motor_right.forward()
+            self.publish_status(drive.MOVING)
         elif (linear < 0 and angular == 0):
             self.motor_left.reverse()
             self.motor_right.reverse()
+            self.publish_status(drive.MOVING)
         elif (linear == 0 and angular > 0):
-            print("positive angular")
-            self.motor_left.forward()
-            self.motor_right.reverse()
-        elif (linear == 0 and angular < 0):
-            print("negative angular")
             self.motor_left.reverse()
             self.motor_right.forward()
+            self.publish_status(drive.MOVING)
+        elif (linear == 0 and angular < 0):
+            self.motor_left.forward()
+            self.motor_right.reverse()
+            self.publish_status(drive.MOVING)
+        elif (linear == 0 and angular == 0):
+            self.stop()
             
         self.last_cmd_time = time.time()
-        self.publish_status(drive.MOVING)
+        
     
     def publish_status(self, new_status):
     
@@ -127,12 +184,14 @@ class drive(Node):
     def node_run(self):
         
         while True:
+            self.tick()
+            
             #Check Command timeout
             if (self.status == drive.MOVING):
                 if (time.time() - self.last_cmd_time) > CMD_TIMEOUT:
                     self.stop()
             
-            time.sleep(0.01)
+            time.sleep(self.cycle_time)
 
 #Main entry point
 if __name__ == "__main__":

@@ -27,6 +27,8 @@ keep_alive = 60
 
 keyboard_id=""
 
+CYCLE = 60
+
 class remote(Node):
     
     def __init__(self):
@@ -41,6 +43,8 @@ class remote(Node):
         logger.info(f"{NODE_NAME} inited")
         
         #self.find_keyboard_device()
+        
+        self.cycle_time = 1 / CYCLE
         
     def _on_connect(self, client, userdata, flags, rc):
         logger.info(f"{NODE_NAME} on connect")
@@ -66,6 +70,8 @@ class remote(Node):
                 self.move_command(0, -1)
             case "KEY_RIGHT":
                 self.move_command(0, 1)
+            case "KEY_ENTER":
+                self.move_command(0, 0)
     
     def move_command(self, linear, angular):
         
@@ -89,16 +95,24 @@ class remote(Node):
     def node_run(self):
         
         while True:
-            
+            #Ket pressend events
             dev = InputDevice('/dev/input/event0')
             for event in dev.read_loop():
                 if event.type == ecodes.EV_KEY:
                     key_event = categorize(event)
                     if key_event.keystate == key_event.key_down:
-                        print(f"Key pressed: {key_event.keycode} on event4")
-
+                        print(f"Key down: {key_event.keycode} on event4")
                         self.on_keypressed(key_event.keycode)
-            time.sleep(0.01)
+                        
+                    if key_event.keystate == key_event.key_up:
+                        print(f"Key up: {key_event.keycode} on event4")
+                        self.move_command(0, 0)
+                        
+                    if key_event.keystate == key_event.key_hold:
+                        print(f"Key hold: {key_event.keycode} on event4")
+                        self.on_keypressed(key_event.keycode)
+                        
+        time.sleep(self.cycle_time)
     
     
 
