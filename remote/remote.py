@@ -11,7 +11,7 @@ logging.basicConfig(
     )
 logger = logging.getLogger(__name__)
 
-from evdev import InputDevice, categorize, ecodes
+from evdev import InputDevice, categorize, ecodes, list_devices
 
 from framework.node import Node
 
@@ -25,6 +25,8 @@ broker = "localhost"  # or IP address of your broker
 port = 1883
 keep_alive = 60
 
+keyboard_id=""
+
 class remote(Node):
     
     def __init__(self):
@@ -37,6 +39,8 @@ class remote(Node):
         self.connect(broker, port, keep_alive)
         
         logger.info(f"{NODE_NAME} inited")
+        
+        #self.find_keyboard_device()
         
     def _on_connect(self, client, userdata, flags, rc):
         logger.info(f"{NODE_NAME} on connect")
@@ -71,13 +75,22 @@ class remote(Node):
         }
         
         self.publish(self.move_topic,  json.dumps(move_cmd))
+    
+    def find_keyboard_device(self):
+        devices = [InputDevice(path) for path in list_devices()]
         
-        
+        for device in devices:
+            print(f"{device.name} {device.path}")
+            if 'mouse' in device.name.lower():
+                print(device.path)
+                return device.path
+        return None
+            
     def node_run(self):
         
         while True:
             
-            dev = InputDevice('/dev/input/event4')
+            dev = InputDevice('/dev/input/event0')
             for event in dev.read_loop():
                 if event.type == ecodes.EV_KEY:
                     key_event = categorize(event)
